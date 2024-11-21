@@ -1,0 +1,6 @@
+file 10-I2C-init.lja /boot/boot.d/10-I2C-init.lja
+file 11-tdeckVT-init.py /boot/boot.d/11-tdeckVT-init.py
+file 12-ftouch-tdeck-init.lja /boot/boot.d/11-ftouch-tdeck-init.lja
+file 13-I2Stdeck-init.py /boot/boot.d/12-I2Stdeck-init.py
+mpy src/tdeckVT.py tdeckVT.mpy
+file tdeckVT.mpy /lib/drivers/tdeckVT.mpy

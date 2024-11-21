@@ -1,0 +1,3 @@
+pexec systemprints(2, "Loading I2C bus")
+mki2c -b
+pexec systemprints(1, "Loading I2C bus")

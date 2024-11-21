@@ -1,0 +1,3 @@
+pexec systemprints(2, "Loading touchscreen")
+mkftouch
+pexec systemprints(1, "Loading touchscreen")

@@ -1,0 +1,3 @@
+pexec systemprints(2, "Loading I2S bus")
+mki2s -b SPEAKER_SCK -w SPEAKER_WS -d SPEAKER_DOUT
+pexec systemprints(1, "Loading I2S bus")
