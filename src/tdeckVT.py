@@ -1,6 +1,6 @@
-from board import DISPLAY as _display
-from board import I2C as _I2C
+import board as _board
 import displayio as _displayio
+import digitalio as _digitalio
 import terminalio as _terminalio
 
 _palette = _displayio.Palette(2)
@@ -21,7 +21,7 @@ lm_str = (
 )
 
 
-class cardputerVT:
+class tdeckVT:
     def __init__(self) -> None:
         self._terminal = None
         self._r = None
@@ -37,8 +37,8 @@ class cardputerVT:
         self._ch = bytearray(1)
         self._r = _displayio.Group()
         font_width, font_height = _terminalio.FONT.get_bounding_box()
-        self._lines = int(_display.height / font_height) - 1
-        self._chars = int(_display.width / font_width) - 1
+        self._lines = int(_board.DISPLAY.height / font_height) - 1
+        self._chars = int(_board.DISPLAY.width / font_width) - 1
         tg = _displayio.TileGrid(
             _terminalio.FONT.bitmap,
             pixel_shader=_palette,
@@ -46,14 +46,19 @@ class cardputerVT:
             height=self._lines,
             tile_width=font_width,
             tile_height=font_height,
-            x=(_display.width - (self._chars * font_width)) // 2,
-            y=(_display.height - (self._lines * font_height)) // 2,
+            x=(_board.DISPLAY.width - (self._chars * font_width)) // 2,
+            y=(_board.DISPLAY.height - (self._lines * font_height)) // 2,
         )
         self._terminal = _terminalio.Terminal(tg, _terminalio.FONT)
         self._r.append(tg)
-        _display.root_group = self._r
+        _board.DISPLAY.root_group = self._r
+        _board.DISPLAY.brightness = 1.0
         self._terminal.write(lm_str.replace(b"     Battery: ???%", b""))
-        self._kb_bus = _I2C()
+        self._kb_bus = _board.I2C()
+        self._boot = _digitalio.DigitalInOut(_board.BOOT)
+        self._boot.switch_to_input()
+        self._boot_debounce = False
+        self._alt_mode = False
 
     @property
     def enabled(self):
@@ -61,7 +66,7 @@ class cardputerVT:
 
     @property
     def display(self):
-        return _display
+        return _board.DISPLAY
 
     @display.setter
     def display(self, displayobj) -> None:
@@ -81,13 +86,26 @@ class cardputerVT:
         return len(self._in_buf)
 
     def _rr(self) -> None:
+        kv = not self._boot.value
+        if kv and not self._boot_debounce:
+            self._alt_mode = not self._alt_mode
+        self._boot_debounce = kv
         self._kb_bus.try_lock()
         try:
             self._kb_bus.readfrom_into(0x55, self._ch)
         except OSError:
-            self._kb_bus[0] = 0
+            self._ch[0] = 0
         self._kb_bus.unlock()
-        if self._kb_bus[0]:
+        if self._ch[0]:
+            kv = self._ch[0]
+            if self._alt_mode:
+                if kv > 96 and kv < 122:
+                    kv -= 96
+            if kv == 13:
+                kv = 10
+            elif kv == 8:
+                kv = 127
+            self._ch[0] = kv
             self._in_buf += self._ch
 
     @property
@@ -109,13 +127,13 @@ class cardputerVT:
     def connected(self) -> bool:
         if self._conn:
             return True
-        if self.in_waiting and "\n" in self._in_buf:
-            _display.brightness = 1.0
+        if self.in_waiting and b"\n" in self._in_buf:
+            _board.DISPLAY.brightness = 1.0
             self._fpolls = 0
             self.enable()
         if self._in_buf:
             self.reset_input_buffer()
-            _display.brightness = 1.0
+            _board.DISPLAY.brightness = 1.0
             self._fpolls = 0
         if not self._conn:
             if self._fpolls < 15:
@@ -131,11 +149,11 @@ class cardputerVT:
                     curr = bytes(curr, "UTF-8")
                     self._terminal.write(lm_str.replace(b"???", curr))
                 self._fpolls += 1
-            elif _display.brightness:
+            elif _board.DISPLAY.brightness:
                 try:
-                    _display.brightness -= 0.1
+                    _board.DISPLAY.brightness -= 0.1
                 except:
-                    _display.brightness = 0
+                    _board.DISPLAY.brightness = 0
         else:
             self._bat_vstate = -1
         return self._conn
@@ -144,7 +162,7 @@ class cardputerVT:
         self.disable()
 
     def reset_input_buffer(self) -> None:
-        self._in_buf = str()
+        self._in_buf = bytearray()
 
     def read(self, count=None):
         if count is None:
@@ -154,13 +172,13 @@ class cardputerVT:
         res = self._in_buf[:count]
         self._in_buf = self._in_buf[count:]
         del count
-        return res
+        return res.replace(b"\r", b"\n")
 
     def enable(self) -> None:
         self._terminal.write(cl_str)
-        _display.root_group = self._r
+        _board.DISPLAY.root_group = self._r
         self._conn = True
-        _display.brightness = 1.0
+        _board.DISPLAY.brightness = 1.0
 
     def disable(self) -> None:
         self._conn = False
@@ -176,7 +194,7 @@ class cardputerVT:
         return res
 
     def deinit(self) -> None:
-        _display.brightness = 1.0
+        _board.DISPLAY.brightness = 1.0
         self._terminal.write(
             cl_str + b" " * 9 + b"Console deinitialized\n\r" + b"-" * 39
         )
