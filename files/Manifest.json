@@ -2,7 +2,7 @@
     "JPKG_minimum_version": 2,
     "package_name": "tdeck-config",
     "version": [1, 0, 0],
-    "dependencies": ["i2ctools", "i2stools", "ftouchutils"],
+    "dependencies": ["i2ctools", "i2stools", "gt911touchutils"],
     "conflicts": [],
     "install": "installer.py",
     "remove": "uninstaller.py",
