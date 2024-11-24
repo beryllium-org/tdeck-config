@@ -1,7 +1,10 @@
 import board as _board
 import displayio as _displayio
 import digitalio as _digitalio
+import countio as _countio
 import terminalio as _terminalio
+from time import monotonic as _monotonic
+from pulseio import PulseIn as _pulsein
 
 _palette = _displayio.Palette(2)
 _palette[1] = 0xFFFFFF
@@ -9,15 +12,16 @@ _palette[1] = 0xFFFFFF
 cl_str = b"\x1b[2J\x1b[3J\x1b[H"
 lm_str = (
     cl_str
-    + b" Console locked, press ENTER to unlock\n\r"
-    + b"-" * 39
-    + b"\n\r"
-    + b"  ,-----------,     System active\n\r"
+    + b" " * 7
+    + b"Console locked, press ENTER to unlock\n\r"
+    + b"-" * 52
+    + b"\n\r  ,-----------,     System active\n\r"
     + b"  | 4    9.01 |     -------------\n\r"
     + b"  |           |\n\r"
     + b"  |           |     Battery: ???%\n\r"
-    + b"  | BERYLLIUM |\n\r"
-    + b"  '-----------'\n\r"
+    + b"  | BERYLLIUM |     Ctrl: Disabled\n\r"
+    + b"  '-----------'\n\r\n\r"
+    + b"To toggle Ctrl, press the trackball.\n\r"
 )
 
 
@@ -32,7 +36,6 @@ class tdeckVT:
         self._conn = False
         self._fpolls = 0
         self._bat = None
-        self._bat_vstate = -1
         self._in_buf = bytearray(0)
         self._ch = bytearray(1)
         self._r = _displayio.Group()
@@ -53,12 +56,16 @@ class tdeckVT:
         self._r.append(tg)
         _board.DISPLAY.root_group = self._r
         _board.DISPLAY.brightness = 1.0
-        self._terminal.write(lm_str.replace(b"     Battery: ???%", b""))
+        self._terminal.write(lm_str)
         self._kb_bus = _board.I2C()
-        self._boot = _digitalio.DigitalInOut(_board.BOOT)
-        self._boot.switch_to_input()
-        self._boot_debounce = False
-        self._alt_mode = False
+        self._boot = _countio.Counter(_board.BOOT)
+        self._bstv = 0
+        self._bst = False
+        self._w = _pulsein(_board.TRACKBALL_UP, maxlen=10)
+        self._a = _pulsein(_board.TRACKBALL_LEFT, maxlen=10)
+        self._s = _pulsein(_board.TRACKBALL_DOWN, maxlen=10)
+        self._d = _pulsein(_board.TRACKBALL_RIGHT, maxlen=10)
+        self._bdebounce = _monotonic()
 
     @property
     def enabled(self):
@@ -81,24 +88,32 @@ class tdeckVT:
         return [self._chars, self._lines]
 
     @property
+    def alt_mode(self) -> bool:
+        if self._boot.count != self._bstv:
+            self._bstv = self._boot.count
+            ct = _monotonic()
+            if ct - self._bdebounce > 0.25:
+                self._bst = not self._bst
+                self._bdebounce = ct
+                self._fpolls = 0
+                _board.DISPLAY.brightness = 1.0
+        return self._bst
+
+    @property
     def in_waiting(self) -> int:
         self._rr()
         return len(self._in_buf)
 
     def _rr(self) -> None:
-        kv = not self._boot.value
-        if kv and not self._boot_debounce:
-            self._alt_mode = not self._alt_mode
-        self._boot_debounce = kv
         self._kb_bus.try_lock()
         try:
             self._kb_bus.readfrom_into(0x55, self._ch)
         except OSError:
             self._ch[0] = 0
         self._kb_bus.unlock()
-        if self._ch[0]:
-            kv = self._ch[0]
-            if self._alt_mode:
+        kv = self._ch[0]
+        if kv:
+            if self.alt_mode:
                 if kv > 96 and kv < 122:
                     kv -= 96
             if kv == 13:
@@ -107,6 +122,21 @@ class tdeckVT:
                 kv = 127
             self._ch[0] = kv
             self._in_buf += self._ch
+        else:
+            if len(self._w) or len(self._a) or len(self._s) or len(self._d):
+                if len(self._w) > 4:
+                    self._in_buf += b'\x1b[A'
+                elif len(self._a) > 4:
+                    self._in_buf += b'\x1b[D'
+                elif len(self._s) > 4:
+                    self._in_buf += b'\x1b[B'
+                elif len(self._d) > 4:
+                    self._in_buf += b'\x1b[C'
+                self._w.clear()
+                self._a.clear()
+                self._s.clear()
+                self._d.clear()
+
 
     @property
     def battery(self) -> int:
@@ -138,8 +168,7 @@ class tdeckVT:
         if not self._conn:
             if self._fpolls < 15:
                 curr = self.battery
-                if curr != -1 and curr != self._bat_vstate:
-                    self._bat_vstate = curr
+                if curr != -1:
                     if curr < 10:
                         curr = 2 * " " + str(curr)
                     elif curr < 100:
@@ -147,15 +176,16 @@ class tdeckVT:
                     else:
                         curr = str(curr)
                     curr = bytes(curr, "UTF-8")
-                    self._terminal.write(lm_str.replace(b"???", curr))
+                    mdstr = lm_str.replace(b"???", curr)
+                    if self.alt_mode:
+                        mdstr = mdstr.replace(b"Disabled", b"Enabled")
+                    self._terminal.write(mdstr)
                 self._fpolls += 1
             elif _board.DISPLAY.brightness:
                 try:
-                    _board.DISPLAY.brightness -= 0.1
+                    _board.DISPLAY.brightness -= 0.2
                 except:
                     _board.DISPLAY.brightness = 0
-        else:
-            self._bat_vstate = -1
         return self._conn
 
     def disconnect(self) -> None:
@@ -168,11 +198,10 @@ class tdeckVT:
         if count is None:
             raise OSError("This console does not support unbound reads")
         while self.in_waiting < count:
-            self._rr()
+            pass
         res = self._in_buf[:count]
         self._in_buf = self._in_buf[count:]
-        del count
-        return res.replace(b"\r", b"\n")
+        return res
 
     def enable(self) -> None:
         self._terminal.write(cl_str)
@@ -196,7 +225,7 @@ class tdeckVT:
     def deinit(self) -> None:
         _board.DISPLAY.brightness = 1.0
         self._terminal.write(
-            cl_str + b" " * 9 + b"Console deinitialized\n\r" + b"-" * 39
+            cl_str + b" " * ((self._chars // 2) - 10) + b"Console deinitialized\n\r" + b"-" * self._chars
         )
         del self._in_buf
         del self
