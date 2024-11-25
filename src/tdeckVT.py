@@ -137,18 +137,17 @@ class tdeckVT:
         else:
             if len(self._w) or len(self._a) or len(self._s) or len(self._d):
                 if len(self._w) > 4:
-                    self._in_buf += b'\x1b[A'
+                    self._in_buf += b"\x1b[A"
                 elif len(self._a) > 4:
-                    self._in_buf += b'\x1b[D'
+                    self._in_buf += b"\x1b[D"
                 elif len(self._s) > 4:
-                    self._in_buf += b'\x1b[B'
+                    self._in_buf += b"\x1b[B"
                 elif len(self._d) > 4:
-                    self._in_buf += b'\t' if self.alt_mode else b'\x1b[C'
+                    self._in_buf += b"\t" if self.alt_mode else b"\x1b[C"
                 self._w.clear()
                 self._a.clear()
                 self._s.clear()
                 self._d.clear()
-
 
     @property
     def battery(self) -> int:
@@ -190,7 +189,7 @@ class tdeckVT:
                     curr = bytes(curr, "UTF-8")
                     _gc.collect()
                     _gc.collect()
-                    mfree = bytes(str(_gc.mem_free()//1024), "UTF-8")
+                    mfree = bytes(str(_gc.mem_free() // 1024), "UTF-8")
                     mdstr = lm_str.replace(b"????KB", mfree + "KB")
                     mdstr = mdstr.replace(b"???", curr)
                     if self.alt_mode:
@@ -241,7 +240,10 @@ class tdeckVT:
     def deinit(self) -> None:
         _board.DISPLAY.brightness = 1.0
         self._terminal.write(
-            cl_str + b" " * ((self._chars // 2) - 10) + b"Console deinitialized\n\r" + b"-" * self._chars
+            cl_str
+            + b" " * ((self._chars // 2) - 10)
+            + b"Console deinitialized\n\r"
+            + b"-" * self._chars
         )
         del self._in_buf
         del self
