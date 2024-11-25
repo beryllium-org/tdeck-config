@@ -5,6 +5,9 @@ import countio as _countio
 import terminalio as _terminalio
 from time import monotonic as _monotonic
 from pulseio import PulseIn as _pulsein
+import gc as _gc
+from cptoml import fetch as _fetch
+from os import uname as _uname
 
 _palette = _displayio.Palette(2)
 _palette[1] = 0xFFFFFF
@@ -17,11 +20,20 @@ lm_str = (
     + b"-" * 52
     + b"\n\r  ,-----------,     System active\n\r"
     + b"  | 4    9.01 |     -------------\n\r"
-    + b"  |           |\n\r"
-    + b"  |           |     Battery: ???%\n\r"
-    + b"  | BERYLLIUM |     Ctrl: Disabled\n\r"
-    + b"  '-----------'\n\r\n\r"
-    + b"To toggle Ctrl, press the trackball.\n\r"
+    + b"  |           |     Beryllium OS\n\r"
+    + b"  |           |     "
+    + bytes(_fetch("git_tag", "BERYLLIUM"), "UTF-8")
+    + b"\n\r  | BERYLLIUM |     CircuitPython\n\r"
+    + b"  '-----------'     "
+    + bytes(_uname()[3][: _uname()[3].find(" on ")], "UTF-8")
+    + (b"\n\r" * 2)
+    + b"-" * 52
+    + b"\n\rTo toggle Ctrl, press the trackball.\n\r"
+    + b"The trackball is the system's arrow keys.\n\r"
+    + b"When Ctrl is pressed, RIGHT is TAB and UP/DOWN\n\r"
+    + b"is HOME/END, accordingly.\n\r\n\r"
+    + b"-" * 52
+    + b"Ctrl: Disabled | Battery: ???% | RAM: ????/????KB"
 )
 
 
@@ -131,7 +143,7 @@ class tdeckVT:
                 elif len(self._s) > 4:
                     self._in_buf += b'\x1b[B'
                 elif len(self._d) > 4:
-                    self._in_buf += b'\x1b[C'
+                    self._in_buf += b'\t' if self.alt_mode else b'\x1b[C'
                 self._w.clear()
                 self._a.clear()
                 self._s.clear()
@@ -176,9 +188,16 @@ class tdeckVT:
                     else:
                         curr = str(curr)
                     curr = bytes(curr, "UTF-8")
-                    mdstr = lm_str.replace(b"???", curr)
+                    _gc.collect()
+                    _gc.collect()
+                    mu = _gc.mem_alloc()
+                    mf = _gc.mem_free()
+                    mused = bytes(str(mu//1024), "UTF-8")
+                    mtot = bytes(str((mu+mf)//1024), "UTF-8")
+                    mdstr = lm_str.replace(b"RAM: ????/????KB", mused + b"/" + mtot + "KB")
+                    mdstr = mdstr.replace(b"???", curr)
                     if self.alt_mode:
-                        mdstr = mdstr.replace(b"Disabled", b"Enabled")
+                        mdstr = mdstr.replace(b"Disabled", b"Enabled ")
                     self._terminal.write(mdstr)
                 self._fpolls += 1
             elif _board.DISPLAY.brightness:
