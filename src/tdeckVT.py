@@ -33,7 +33,7 @@ lm_str = (
     + b"When Ctrl is pressed, RIGHT is TAB and UP/DOWN\n\r"
     + b"is HOME/END, accordingly.\n\r\n\r"
     + b"-" * 52
-    + b"Ctrl: Disabled | Battery: ???% | RAM: ????/????KB"
+    + b"Ctrl: Disabled | Battery: ???% | RAM: ????KB free"
 )
 
 
@@ -190,11 +190,8 @@ class tdeckVT:
                     curr = bytes(curr, "UTF-8")
                     _gc.collect()
                     _gc.collect()
-                    mt = _gc.mem_alloc() + _gc.mem_free()
-                    mu = mt-_gc.mem_free()
-                    mused = bytes(str(mu//1024), "UTF-8")
-                    mtot = bytes(str((mt)//1024), "UTF-8")
-                    mdstr = lm_str.replace(b"RAM: ????/????KB", mused + b"/" + mtot + "KB")
+                    mfree = bytes(str(_gc.mem_free()//1024), "UTF-8")
+                    mdstr = lm_str.replace(b"????KB", mfree + "KB")
                     mdstr = mdstr.replace(b"???", curr)
                     if self.alt_mode:
                         mdstr = mdstr.replace(b"Disabled", b"Enabled ")
