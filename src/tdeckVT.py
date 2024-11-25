@@ -190,10 +190,10 @@ class tdeckVT:
                     curr = bytes(curr, "UTF-8")
                     _gc.collect()
                     _gc.collect()
-                    mu = _gc.mem_alloc()
-                    mf = _gc.mem_free()
+                    mt = _gc.mem_alloc() + _gc.mem_free()
+                    mu = mt-_gc.mem_free()
                     mused = bytes(str(mu//1024), "UTF-8")
-                    mtot = bytes(str((mu+mf)//1024), "UTF-8")
+                    mtot = bytes(str((mt)//1024), "UTF-8")
                     mdstr = lm_str.replace(b"RAM: ????/????KB", mused + b"/" + mtot + "KB")
                     mdstr = mdstr.replace(b"???", curr)
                     if self.alt_mode:
