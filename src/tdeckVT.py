@@ -78,6 +78,7 @@ class tdeckVT:
         self._s = _pulsein(_board.TRACKBALL_DOWN, maxlen=10)
         self._d = _pulsein(_board.TRACKBALL_RIGHT, maxlen=10)
         self._bdebounce = _monotonic()
+        self._lst = _monotonic()
 
     @property
     def enabled(self):
@@ -117,6 +118,8 @@ class tdeckVT:
         return len(self._in_buf)
 
     def _rr(self) -> None:
+        if _monotonic() - self._lst < 0.15:
+            return
         self._kb_bus.try_lock()
         try:
             self._kb_bus.readfrom_into(0x55, self._ch)
@@ -137,17 +140,18 @@ class tdeckVT:
         else:
             if len(self._w) or len(self._a) or len(self._s) or len(self._d):
                 if len(self._w) > 4:
-                    self._in_buf += b"\x1b[A"
+                    self._in_buf += b"\x1b[H" if self.alt_mode else b"\x1b[A"
                 elif len(self._a) > 4:
                     self._in_buf += b"\x1b[D"
                 elif len(self._s) > 4:
-                    self._in_buf += b"\x1b[B"
+                    self._in_buf += b"\x1b[F" if self.alt_mode else b"\x1b[B"
                 elif len(self._d) > 4:
                     self._in_buf += b"\t" if self.alt_mode else b"\x1b[C"
                 self._w.clear()
                 self._a.clear()
                 self._s.clear()
                 self._d.clear()
+        self._lst = _monotonic()
 
     @property
     def battery(self) -> int:
