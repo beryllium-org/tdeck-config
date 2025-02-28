@@ -12,30 +12,6 @@ from os import uname as _uname
 _palette = _displayio.Palette(2)
 _palette[1] = 0xFFFFFF
 
-cl_str = b"\x1b[2J\x1b[3J\x1b[H"
-lm_str = (
-    cl_str
-    + b" " * 7
-    + b"Console locked, press ENTER to unlock\n\r"
-    + b"-" * 52
-    + b"\n\r  ,-----------,     System active\n\r"
-    + b"  | 4    9.01 |     -------------\n\r"
-    + b"  |           |     Beryllium OS\n\r"
-    + b"  |           |     "
-    + bytes(_fetch("git_tag", "BERYLLIUM"), "UTF-8")
-    + b"\n\r  | BERYLLIUM |     CircuitPython\n\r"
-    + b"  '-----------'     "
-    + bytes(_uname()[3][: _uname()[3].find(" on ")], "UTF-8")
-    + (b"\n\r" * 2)
-    + b"-" * 52
-    + b"\n\rTo toggle Ctrl, press the trackball.\n\r"
-    + b"The trackball is the system's arrow keys.\n\r"
-    + b"When Ctrl is pressed, RIGHT is TAB and UP/DOWN\n\r"
-    + b"is HOME/END, accordingly.\n\r\n\r"
-    + b"-" * 52
-    + b"Ctrl: Disabled | Battery: ???% | RAM: ????KB free"
-)
-
 
 class tdeckVT:
     def __init__(self) -> None:
@@ -51,6 +27,11 @@ class tdeckVT:
         self._in_buf = bytearray(0)
         self._ch = bytearray(1)
         self._r = _displayio.Group()
+        self._bckbit = _displayio.Bitmap(
+            _board.DISPLAY.width, _board.DISPLAY.height, 256
+        )
+        self._pal256 = _displayio.Palette(256)
+        self._background = None
         font_width, font_height = _terminalio.FONT.get_bounding_box()
         self._lines = int(_board.DISPLAY.height / font_height) - 1
         self._chars = int(_board.DISPLAY.width / font_width) - 1
@@ -67,8 +48,7 @@ class tdeckVT:
         self._terminal = _terminalio.Terminal(tg, _terminalio.FONT)
         self._r.append(tg)
         _board.DISPLAY.root_group = self._r
-        _board.DISPLAY.brightness = 1.0
-        self._terminal.write(lm_str)
+        _board.DISPLAY.brightness = 0.0
         self._kb_bus = _board.I2C()
         self._boot = _countio.Counter(_board.BOOT)
         self._bstv = 0
@@ -109,8 +89,11 @@ class tdeckVT:
                 self._bst = not self._bst
                 self._bdebounce = ct
                 self._fpolls = 0
-                _board.DISPLAY.brightness = 1.0
         return self._bst
+
+    @alt_mode.setter
+    def alt_mode(self, value: bool):
+        self._bst = bool(value)
 
     @property
     def in_waiting(self) -> int:
@@ -170,41 +153,6 @@ class tdeckVT:
 
     @property
     def connected(self) -> bool:
-        if self._conn:
-            return True
-        if self.in_waiting and b"\n" in self._in_buf:
-            _board.DISPLAY.brightness = 1.0
-            self._fpolls = 0
-            self.enable()
-        if self._in_buf:
-            self.reset_input_buffer()
-            _board.DISPLAY.brightness = 1.0
-            self._fpolls = 0
-        if not self._conn:
-            if self._fpolls < 15:
-                curr = self.battery
-                if curr != -1:
-                    if curr < 10:
-                        curr = 2 * " " + str(curr)
-                    elif curr < 100:
-                        curr = " " + str(curr)
-                    else:
-                        curr = str(curr)
-                    curr = bytes(curr, "UTF-8")
-                    _gc.collect()
-                    _gc.collect()
-                    mfree = bytes(str(_gc.mem_free() // 1024), "UTF-8")
-                    mdstr = lm_str.replace(b"????KB", mfree + "KB")
-                    mdstr = mdstr.replace(b"???", curr)
-                    if self.alt_mode:
-                        mdstr = mdstr.replace(b"Disabled", b"Enabled ")
-                    self._terminal.write(mdstr)
-                self._fpolls += 1
-            elif _board.DISPLAY.brightness:
-                try:
-                    _board.DISPLAY.brightness -= 0.2
-                except:
-                    _board.DISPLAY.brightness = 0
         return self._conn
 
     def disconnect(self) -> None:
@@ -223,31 +171,24 @@ class tdeckVT:
         return res
 
     def enable(self) -> None:
-        self._terminal.write(cl_str)
         _board.DISPLAY.root_group = self._r
         self._conn = True
         _board.DISPLAY.brightness = 1.0
 
     def disable(self) -> None:
         self._conn = False
-        if not self._bat:
-            self._terminal.write(lm_str.replace(b"     Battery: ???%", b""))
-        else:
-            self.connected
+        _board.DISPLAY.brightness = 0.0
 
-    def write(self, data=bytes) -> int:
+    def write(self, data: bytes) -> int:
         if not self._conn:
             return 0
         res = self._terminal.write(data)
         return res
 
+    def mode(self, graphics: bool = False) -> None:
+        pass
+
     def deinit(self) -> None:
-        _board.DISPLAY.brightness = 1.0
-        self._terminal.write(
-            cl_str
-            + b" " * ((self._chars // 2) - 10)
-            + b"Console deinitialized\n\r"
-            + b"-" * self._chars
-        )
+        _board.DISPLAY.brightness = 0.0
         del self._in_buf
         del self
