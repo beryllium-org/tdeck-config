@@ -1,3 +1,4 @@
+file 09-tdeck-battery.lja /boot/boot.d/09-tdeck-battery.lja
 file 10-I2C-init.lja /boot/boot.d/10-I2C-init.lja
 file 11-tdeckVT-init.py /boot/boot.d/11-tdeckVT-init.py
 file 12-gtouch-tdeck-init.lja /boot/boot.d/12-gtouch-tdeck-init.lja
