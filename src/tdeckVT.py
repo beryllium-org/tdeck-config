@@ -73,17 +73,21 @@ class _Axis:
         self.inst = 0.0
         self.sgn = 0
 
-    def poll(self, dt):
+    def poll(self, dt, lone=False):
         n = self.neg.count
         p = self.pos.count
         self.neg.reset()
         self.pos.reset()
         net = 0
-        if p + n >= 2:  # a real crossing is >= 2 edges; a lone one is noise
+        if p + n >= 2:
             if p > n:
                 net = p
             elif n > p:
                 net = -n
+        elif lone and p + n:
+            # graphics mode: a lone edge is real motion (trackball.py's
+            # MIN_COUNT=1), not noise -- count it, dominant direction
+            net = 1 if p > n else -1
         self.net = net
         inst = (p + n) / dt if dt else 0.0
         self.inst = inst
@@ -324,8 +328,8 @@ class tdeckVT:
 
         # ---- trackball -> VT navigation (the engine itself is untouched;
         # these semantics apply only to terminal arrow emission)
-        dx = self._ax_x.poll(dt)
-        dy = self._ax_y.poll(dt)
+        dx = self._ax_x.poll(dt, self._gfx)
+        dy = self._ax_y.poll(dt, self._gfx)
         nx = self._ax_x.net
         ny = self._ax_y.net
         if self._gfx:
